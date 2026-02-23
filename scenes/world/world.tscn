@@ -15,9 +15,8 @@ fog_depth_begin = 96.0
 fog_depth_end = 112.0
 adjustment_enabled = true
 
-[node name="World" type="Node3D" unique_id=448434815 node_paths=PackedStringArray("chunk_loaders")]
+[node name="World" type="Node3D" unique_id=448434815]
 script = ExtResource("1_dphjl")
-chunk_loaders = [NodePath("Player")]
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=969201157]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 20, 0)
@@ -30,7 +29,7 @@ environment = SubResource("Environment_dphjl")
 
 [node name="Players" type="Node3D" parent="." unique_id=128847087]
 
-[node name="Player" parent="." unique_id=1437932268 instance=ExtResource("2_sl2e5")]
+[node name="Player" parent="Players" unique_id=1437932268 instance=ExtResource("2_sl2e5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 40, 0)
 
 [node name="DebugInfo" type="Control" parent="." unique_id=1961514634]

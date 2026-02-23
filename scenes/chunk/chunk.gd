@@ -5,7 +5,7 @@ extends Node3D
 """====================================
 -------- SIGNALS DECLARATIONS ---------
 ===================================="""
-signal chunk_loaded
+signal loaded
 
 """====================================
 -------- STATIC VARS AND FUNCS --------
@@ -18,11 +18,23 @@ static var LAYER_STONE_HEIGHT = 20
 static var texture
 static var material
 
+# Utilities
 static func coordinate_2_index(x:int, y:int, z:int) -> int:
 	return x + (y * CHUNK_SIZE) + (z * CHUNK_SIZE * CHUNK_HEIGHT)
 
-static func get_chunk_id(x:int, y:int) -> String:
-	return "x"+str(x)+"y"+str(y)
+static func coordinates_2_chunk(x:int, z:int) -> Vector2i:
+	return Vector2i(floor(x*1.0/Chunk.CHUNK_SIZE), floor(z*1.0/Chunk.CHUNK_SIZE))
+
+static func get_chunks_in_radius(center_x: int, center_y: int, radius: int) -> Array[Vector2i]:
+	var chunk_list: Array[Vector2i] = []
+	var radius_squared = radius * radius
+	for x in range(center_x - radius, center_x + radius + 1):
+		for y in range(center_y - radius, center_y + radius + 1):
+			var dx = x - center_x
+			var dy = y - center_y
+			if (dx * dx) + (dy * dy) <= radius_squared:
+				chunk_list.append(Vector2i(x, y))
+	return chunk_list
 
 static func setup_material():
 	if texture == null and material == null:
@@ -57,25 +69,41 @@ func _ready():
 	setup_material()
 	blocks_data.resize(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT)
 	blocks_data.fill(Blocks.Block.AIR)
-	WorkerThreadPool.add_task(load_chunk, true)
+	load_chunk()
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if marked_for_unload and finished_loading:
 		unload()
 
-func load_chunk():
-	if noise != null:
-		generate_from_noise(noise)
-		var mesh = build_mesh()
-		var shape = mesh.create_trimesh_shape()
-		call_deferred("apply_mesh", mesh, shape)
+func load_chunk(data:PackedByteArray=[]):
+	var chunk_load_process = Callable(self, "_load_process").bind(data)
+	WorkerThreadPool.add_task(chunk_load_process, true)
 
+func _load_process(data:PackedByteArray=[]):
+	if noise != null and data.is_empty():
+		generate_from_noise(noise)
+	elif data.size() == CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT:
+		print("Chunk load from data is not implemented yet. Ignoring...")
+		finished_loading = true
+		loaded.emit()
+		return
+	var mesh = build_mesh()
+	var shape = mesh.create_trimesh_shape()
+	call_deferred("apply_mesh", mesh, shape)
+
+func reload_chunk():
+	WorkerThreadPool.add_task(_reload_process, true)
+
+func _reload_process():
+	var mesh = build_mesh()
+	var shape = mesh.create_trimesh_shape()
+	call_deferred("apply_mesh", mesh, shape)
 
 func apply_mesh(new_mesh: ArrayMesh, shape: ConcavePolygonShape3D):
 	chunk_mesh.mesh = new_mesh
 	chunk_mesh.material_override = material
 	collision_shape.shape = shape
-	chunk_loaded.emit()
+	loaded.emit()
 
 func mark_for_unload():
 	marked_for_unload = true

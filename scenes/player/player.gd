@@ -1,9 +1,9 @@
+class_name Player
 extends CharacterBody3D
 
 var SPEED = 5.0
 const JUMP_VELOCITY = 5.0
 
-@export var mouse_sensitivity: float = 0.002
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
@@ -12,15 +12,20 @@ const JUMP_VELOCITY = 5.0
 
 @export var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
+var last_current_chunk = null
+var chunks_in_sight = []
+
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	Players.add_player(self)
+	Client.client_player = self
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		var sensitivity = Settings.get_setting(Settings.Setting.CameraSensitivity)
+		rotate_y(-event.relative.x * sensitivity)
 		
-		rotate_y(-event.relative.x * mouse_sensitivity)
-		
-		head.rotate_x(-event.relative.y * mouse_sensitivity)
+		head.rotate_x(-event.relative.y * sensitivity)
 		
 		head.rotation.x = clamp(head.rotation.x, deg_to_rad(-90), deg_to_rad(90))
 
@@ -52,7 +57,16 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 func _process(_delta):
+	check_chunk()
 	update_raycast()
+
+func check_chunk():
+	var current_chunk = Chunk.coordinates_2_chunk(int(position.x), int(position.z))
+	if last_current_chunk != current_chunk:
+		last_current_chunk = current_chunk
+		var world = get_parent().get_parent()
+		if world != null and is_instance_of(world, World):
+			world.add_chunks_to_queue(self, Chunk.get_chunks_in_radius(int(position.x), int(position.z), Settings.get_setting(Settings.Setting.RenderDistance)))
 
 func update_raycast():
 	if not raycast.is_colliding():
@@ -66,4 +80,6 @@ func update_raycast():
 	var b_y = floor(block_pos.y)
 	var b_z = floor(block_pos.z)
 	highlight_box.global_position = Vector3(b_x + 0.5, b_y + 0.5, b_z + 0.5)
-	
+
+func get_chunks_in_sight():
+	return Chunk.get_chunks_in_radius(int(position.x), int(position.z), Settings.get_setting(Settings.Setting.RenderDistance))
