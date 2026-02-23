@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://6vn8sqah7yl"]
+
+[ext_resource type="Script" uid="uid://dmqybqg02542r" path="res://scenes/player/player.gd" id="1_8afob"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8afob"]
+height = 1.7441406
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8afob"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0, 0, 0, 0.15686275)
+
+[sub_resource type="BoxMesh" id="BoxMesh_dovo2"]
+material = SubResource("StandardMaterial3D_8afob")
+size = Vector3(1.01, 1.01, 1.01)
+
+[node name="Player" type="CharacterBody3D" unique_id=1437932268]
+script = ExtResource("1_8afob")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1777257851]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.92613685, 0)
+shape = SubResource("CapsuleShape3D_8afob")
+
+[node name="Head" type="Node3D" parent="." unique_id=383561307]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Head" unique_id=275613660]
+current = true
+
+[node name="RayCast3D" type="RayCast3D" parent="Head" unique_id=892305284]
+target_position = Vector3(0, 0, -7)
+
+[node name="HighlightBox" type="MeshInstance3D" parent="." unique_id=1768301600]
+top_level = true
+visible = false
+mesh = SubResource("BoxMesh_dovo2")
