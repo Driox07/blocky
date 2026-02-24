@@ -12,9 +12,8 @@ const JUMP_VELOCITY = 5.0
 @export var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 var last_current_chunk = null
-var chunks_in_sight = []
 
-var world
+var world:World
 
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -87,6 +86,11 @@ func update_raycast():
 	var b_z = floor(block_pos.z)
 	highlight_box.global_position = Vector3(b_x + 0.5, b_y + 0.5, b_z + 0.5)
 
-func get_chunks_in_sight():
+func get_chunks_in_sight(exclude_loaded:bool=true):
+	if world == null: return
+	var excluded = world.get_loaded_chunks_positions() if exclude_loaded else []
 	var chunk_coord = Chunk.coordinates_2_chunk(int(position.x), int(position.z))
-	return Chunk.get_chunks_in_radius(chunk_coord.x, chunk_coord.y, Settings.get_setting(Settings.Setting.RenderDistance))
+	return Chunk.get_chunks_in_radius(chunk_coord.x, 
+	chunk_coord.y, 
+	Settings.get_setting(Settings.Setting.RenderDistance),
+	excluded)

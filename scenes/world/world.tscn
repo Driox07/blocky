@@ -5,15 +5,20 @@
 [ext_resource type="PackedScene" uid="uid://6vn8sqah7yl" path="res://scenes/player/player.tscn" id="2_sl2e5"]
 [ext_resource type="Texture2D" uid="uid://d1c27vsxlh1bx" path="res://assets/pointer.png" id="4_6m72w"]
 
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_6m72w"]
+sky_top_color = Color(0.1575101, 0.46871263, 0.7101774, 1)
+ground_bottom_color = Color(0.15686275, 0.47058824, 0.70980394, 1)
+
+[sub_resource type="Sky" id="Sky_v5dby"]
+sky_material = SubResource("ProceduralSkyMaterial_6m72w")
+
 [sub_resource type="Environment" id="Environment_dphjl"]
+sky = SubResource("Sky_v5dby")
 ambient_light_source = 3
 ambient_light_color = Color(0.47007608, 0.47007573, 0.47007596, 1)
-fog_enabled = true
 fog_mode = 1
+fog_light_color = Color(0.15686275, 0.47058824, 0.70980394, 1)
 fog_density = 1.0
-fog_depth_begin = 96.0
-fog_depth_end = 112.0
-adjustment_enabled = true
 
 [node name="World" type="Node3D" unique_id=448434815]
 script = ExtResource("1_dphjl")
@@ -44,47 +49,58 @@ layout_mode = 0
 offset_right = 40.0
 offset_bottom = 40.0
 
-[node name="HBoxContainer4" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=1926021452]
+[node name="FPS" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=1926021452]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer4" unique_id=1698697420]
+[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/FPS" unique_id=1698697420]
 layout_mode = 2
 text = "FPS: "
 
-[node name="FPSLabel" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer4" unique_id=680989509]
+[node name="FPSLabel" type="Label" parent="DebugInfo/VBoxContainer/FPS" unique_id=680989509]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=123472729]
+[node name="LoadQueue" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=123472729]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer" unique_id=633853129]
+[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/LoadQueue" unique_id=633853129]
 layout_mode = 2
 text = "Chunks queue: "
 
-[node name="ChunkQueueLabel" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer" unique_id=1871577594]
+[node name="ChunkQueueLabel" type="Label" parent="DebugInfo/VBoxContainer/LoadQueue" unique_id=1871577594]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=2124549543]
+[node name="UnloadQueue" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=663180933]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer2" unique_id=853653291]
+[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/UnloadQueue" unique_id=471515605]
+layout_mode = 2
+text = "Unload queue: "
+
+[node name="UnloadQueueLabel" type="Label" parent="DebugInfo/VBoxContainer/UnloadQueue" unique_id=379168289]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Coord" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=2124549543]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/Coord" unique_id=853653291]
 layout_mode = 2
 text = "Coordinates:"
 
-[node name="CoordsLabel" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer2" unique_id=918137607]
+[node name="CoordsLabel" type="Label" parent="DebugInfo/VBoxContainer/Coord" unique_id=918137607]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBoxContainer3" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=407948346]
+[node name="ChunkCoord" type="HBoxContainer" parent="DebugInfo/VBoxContainer" unique_id=407948346]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer3" unique_id=1951398121]
+[node name="Label" type="Label" parent="DebugInfo/VBoxContainer/ChunkCoord" unique_id=1951398121]
 layout_mode = 2
 text = "Chunk:"
 
-[node name="ChunkLabel" type="Label" parent="DebugInfo/VBoxContainer/HBoxContainer3" unique_id=1595962357]
+[node name="ChunkLabel" type="Label" parent="DebugInfo/VBoxContainer/ChunkCoord" unique_id=1595962357]
 unique_name_in_owner = true
 layout_mode = 2
 
@@ -111,3 +127,8 @@ offset_bottom = 20.0
 grow_horizontal = 2
 grow_vertical = 2
 texture = ExtResource("4_6m72w")
+
+[node name="ChunkUnloadTimer" type="Timer" parent="." unique_id=1975183994]
+autostart = true
+
+[connection signal="timeout" from="ChunkUnloadTimer" to="." method="_on_chunk_unload_timer_timeout"]
