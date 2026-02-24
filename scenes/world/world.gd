@@ -10,7 +10,8 @@ const chunk_scene = preload("res://scenes/chunk/chunk.tscn")
 @export var world_seed:String = ""
 var noise:FastNoiseLite
 
-var is_chunk_generating = false
+const MAX_CHUNKS_PER_FRAME = 8
+var chunks_loading = 0
 
 var last_player_queue = 0 # Index of the player in Players
 var chunk_queues = {}
@@ -27,26 +28,21 @@ func _process(_delta: float) -> void:
 	update_debug_info()
 	pass
 
-func add_chunks_to_queue(player: Player, new_chunks: Array[Vector2i]):
-	if not chunk_queues.has(player):
-		chunk_queues[player] = []
-	var current_queue = chunk_queues[player]
-	for c in new_chunks:
-		if not loaded_chunks.has(c) and not current_queue.has(c):
-			current_queue.append(c)
-	sort_player_queue(player, current_queue)
+func set_queue(player: Player, new_chunks: Array[Vector2i]):
+	chunk_queues[player] = new_chunks
 
 func load_chunks():
-	if is_chunk_generating: return
+	if chunks_loading >= MAX_CHUNKS_PER_FRAME: return
 	if next_player == null:
 		get_next_player()
 		return
 	if not chunk_queues.has(next_player): return
 	var current_queue = chunk_queues[next_player]
 	if current_queue.is_empty(): return
+	sort_chunks(next_player, current_queue)
 	var chunk = current_queue.pop_front()
 	if loaded_chunks.has(chunk): return
-	is_chunk_generating = true
+	chunks_loading += 1
 	var new_chunk = chunk_scene.instantiate()
 	new_chunk.init_chunk(noise, chunk.x, chunk.y)
 	new_chunk.position = Vector3(chunk.x * Chunk.CHUNK_SIZE, 0, chunk.y * Chunk.CHUNK_SIZE)
@@ -56,7 +52,15 @@ func load_chunks():
 	get_next_player()
 
 func _on_chunk_loaded():
-	is_chunk_generating = false
+	chunks_loading = max(0, chunks_loading - 1)
+
+func sort_chunks(player:Player, queue:Array):
+	var p_chunk = Chunk.coordinates_2_chunk(int(player.position.x), int(player.position.z))
+	queue.sort_custom(func(a: Vector2i, b:Vector2i):
+			var dist_a = (a.x - p_chunk.x) ** 2 + (a.y - p_chunk.y) ** 2
+			var dist_b = (b.x - p_chunk.x) ** 2 + (b.y - p_chunk.y) ** 2
+			return dist_a < dist_b
+			)
 
 func get_next_player():
 	if next_player == null:
@@ -66,14 +70,6 @@ func get_next_player():
 		return
 	next_player_idx = (next_player_idx + 1) % Players.players.size()
 	next_player = Players.players[next_player_idx]
-
-func sort_player_queue(player:Player, queue:Array):
-	var p_chunk = Chunk.coordinates_2_chunk(int(player.position.x), int(player.position.z))
-	queue.sort_custom(func(a: Vector2i, b:Vector2i):
-			var dist_a = (a.x - p_chunk.x) ** 2 + (a.y - p_chunk.y) ** 2
-			var dist_b = (b.x - p_chunk.x) ** 2 + (b.y - p_chunk.y) ** 2
-			return dist_a < dist_b
-			)
 
 func setup_noise():
 	noise = FastNoiseLite.new()

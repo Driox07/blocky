@@ -3,7 +3,7 @@ extends Node
 enum Setting {RenderDistance, CameraSensitivity}
 
 var settings:Dictionary[Setting, Variant] = {
-	Setting.RenderDistance: 8, # Render distance in chunks
+	Setting.RenderDistance: 12, # Render distance in chunks
 	Setting.CameraSensitivity: 0.002
 }
 

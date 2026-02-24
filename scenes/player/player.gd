@@ -4,7 +4,6 @@ extends CharacterBody3D
 var SPEED = 5.0
 const JUMP_VELOCITY = 5.0
 
-
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var raycast:RayCast3D = $Head/RayCast3D
@@ -15,10 +14,19 @@ const JUMP_VELOCITY = 5.0
 var last_current_chunk = null
 var chunks_in_sight = []
 
+var world
+
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	Players.add_player(self)
 	Client.client_player = self
+	get_world()
+
+func get_world():
+	if world == null:
+		var tree_world = get_parent().get_parent()
+		if tree_world != null and is_instance_of(tree_world, World):
+			world = tree_world
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
@@ -64,9 +72,7 @@ func check_chunk():
 	var current_chunk = Chunk.coordinates_2_chunk(int(position.x), int(position.z))
 	if last_current_chunk != current_chunk:
 		last_current_chunk = current_chunk
-		var world = get_parent().get_parent()
-		if world != null and is_instance_of(world, World):
-			world.add_chunks_to_queue(self, Chunk.get_chunks_in_radius(int(position.x), int(position.z), Settings.get_setting(Settings.Setting.RenderDistance)))
+		world.set_queue(self, get_chunks_in_sight())
 
 func update_raycast():
 	if not raycast.is_colliding():
@@ -82,4 +88,5 @@ func update_raycast():
 	highlight_box.global_position = Vector3(b_x + 0.5, b_y + 0.5, b_z + 0.5)
 
 func get_chunks_in_sight():
-	return Chunk.get_chunks_in_radius(int(position.x), int(position.z), Settings.get_setting(Settings.Setting.RenderDistance))
+	var chunk_coord = Chunk.coordinates_2_chunk(int(position.x), int(position.z))
+	return Chunk.get_chunks_in_radius(chunk_coord.x, chunk_coord.y, Settings.get_setting(Settings.Setting.RenderDistance))
