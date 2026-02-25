@@ -39,13 +39,20 @@ static func get_chunks_in_radius(center_x: int, center_y: int, radius: int, to_e
 	return chunk_list
 
 static func setup_material():
+	#if texture == null and material == null:
+		#texture = preload("res://assets/block_textures.png")
+		#material = StandardMaterial3D.new()
+		#material.albedo_texture = texture
+		##material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		#material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+		#material.roughness = 1.0
 	if texture == null and material == null:
-		texture = preload("res://assets/block_textures.png")
-		material = StandardMaterial3D.new()
-		material.albedo_texture = texture
-		#material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
-		material.roughness = 1.0
+		texture = preload("res://assets/blocks/block_textures.png")
+		var shader = preload("res://assets/shaders/block_texture_repeat.gdshader")
+		material = ShaderMaterial.new()
+		material.shader = shader
+		material.set_shader_parameter("texture_array", texture)
+		
 
 """====================================
 ----------- INSTANCE LOGIC ------------
@@ -125,20 +132,10 @@ func set_block(x: int, y: int, z: int, block: int):
 		blocks_data[index] = block
 
 func get_block(x:int, y:int, z:int) -> int:
-	if  y < 0 or y >= CHUNK_HEIGHT:
+	if y < 0 or y >= CHUNK_HEIGHT:
 		return Blocks.Block.AIR
 	if x >= 0 and x < CHUNK_SIZE and z >= 0 and z < CHUNK_SIZE:
-		var index = coordinate_2_index(x, y, z)
-		if index >= 0 and index < blocks_data.size():
-			return blocks_data[index]
-		return Blocks.Block.AIR
-	var global_x = (chunk_x * CHUNK_SIZE) + x
-	var global_z = (chunk_y * CHUNK_SIZE) + z
-	var noise_value = noise.get_noise_2d(global_x, global_z)
-	var normalized_value = (noise_value + 1.0) / 2.0
-	var predicted_height = int(normalized_value * (CHUNK_HEIGHT - CHUNK_GEN_HEIGHT_MARGIN) + CHUNK_GEN_MIN_BASE)
-	if y < predicted_height:
-		return Blocks.Block.STONE
+		return blocks_data[coordinate_2_index(x, y, z)]
 	return Blocks.Block.AIR
 
 func generate_from_noise(n:FastNoiseLite=noise):
@@ -327,72 +324,80 @@ func add_quad(st:SurfaceTool, v1:Vector3, v2:Vector3, v3:Vector3, v4:Vector3, uv
 	st.add_vertex(v2)
 
 func draw_greedy_face_east(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(1, 0, h)
-	var v2 = pos + Vector3(1, 0, 0)
-	var v3 = pos + Vector3(1, w, 0)
-	var v4 = pos + Vector3(1, w, h)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.EAST), Vector3(1, 0, 0), Vector2(h, w))
+	var v1 = pos + Vector3(0, 0, h)
+	var v2 = pos + Vector3(0, 0, 0)
+	var v3 = pos + Vector3(0, w, 0)
+	var v4 = pos + Vector3(0, w, h)
+	var atlas_index = Blocks.textures[block][Blocks.Face.EAST]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(1, 0, 0), Vector2(h, w))
 
 func draw_greedy_face_west(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
 	var v1 = pos + Vector3(0, 0, 0)
 	var v2 = pos + Vector3(0, 0, h)
 	var v3 = pos + Vector3(0, w, h)
 	var v4 = pos + Vector3(0, w, 0)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.WEST), Vector3(-1, 0, 0), Vector2(h, w))
+	var atlas_index = Blocks.textures[block][Blocks.Face.WEST]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(-1, 0, 0), Vector2(h, w))
 
 func draw_greedy_face_top(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 1, w)
-	var v2 = pos + Vector3(h, 1, w)
-	var v3 = pos + Vector3(h, 1, 0)
-	var v4 = pos + Vector3(0, 1, 0)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.TOP), Vector3(0, 1, 0), Vector2(h, w))
+	var v1 = pos + Vector3(0, 0, w)
+	var v2 = pos + Vector3(h, 0, w)
+	var v3 = pos + Vector3(h, 0, 0)
+	var v4 = pos + Vector3(0, 0, 0)
+	var atlas_index = Blocks.textures[block][Blocks.Face.TOP]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 1, 0), Vector2(h, w))
 
 func draw_greedy_face_bottom(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
 	var v1 = pos + Vector3(0, 0, 0)
 	var v2 = pos + Vector3(h, 0, 0)
 	var v3 = pos + Vector3(h, 0, w)
 	var v4 = pos + Vector3(0, 0, w)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.BOTTOM), Vector3(0, -1, 0), Vector2(h, w))
+	var atlas_index = Blocks.textures[block][Blocks.Face.BOTTOM]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, -1, 0), Vector2(h, w))
 
 func draw_greedy_face_north(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, 1)
-	var v2 = pos + Vector3(w, 0, 1)
-	var v3 = pos + Vector3(w, h, 1)
-	var v4 = pos + Vector3(0, h, 1)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.NORTH), Vector3(0, 0, 1), Vector2(w, h))
+	var v1 = pos + Vector3(0, 0, 0)
+	var v2 = pos + Vector3(w, 0, 0)
+	var v3 = pos + Vector3(w, h, 0)
+	var v4 = pos + Vector3(0, h, 0)
+	var atlas_index = Blocks.textures[block][Blocks.Face.NORTH]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 0, 1), Vector2(w, h))
 
 func draw_greedy_face_south(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
 	var v1 = pos + Vector3(w, 0, 0)
 	var v2 = pos + Vector3(0, 0, 0)
 	var v3 = pos + Vector3(0, h, 0)
 	var v4 = pos + Vector3(w, h, 0)
-	add_greedy_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.SOUTH), Vector3(0, 0, -1), Vector2(w, h))
+	var atlas_index = Blocks.textures[block][Blocks.Face.SOUTH]
+	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 0, -1), Vector2(w, h))
 
-func add_greedy_quad(st:SurfaceTool, v1:Vector3, v2:Vector3, v3:Vector3, v4:Vector3, uvs:Array, normal:Vector3, quad_size:Vector2):   
+func add_greedy_quad(st: SurfaceTool, v1: Vector3, v2: Vector3, v3: Vector3, v4: Vector3, atlas_index: int, normal: Vector3, quad_size: Vector2):
 	st.set_normal(normal)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[0])
+	var page = Vector2(atlas_index, 0)
+
+	st.set_uv2(page)
+	st.set_uv(Vector2(0, quad_size.y))
 	st.add_vertex(v1)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[3])
+	st.set_uv2(page)
+	st.set_uv(Vector2(0, 0))
 	st.add_vertex(v4)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[2])
+	st.set_uv2(page)
+	st.set_uv(Vector2(quad_size.x, 0))
 	st.add_vertex(v3)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[0])
+	st.set_uv2(page)
+	st.set_uv(Vector2(0, quad_size.y))
 	st.add_vertex(v1)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[2])
+	st.set_uv2(page)
+	st.set_uv(Vector2(quad_size.x, 0))
 	st.add_vertex(v3)
 
-	st.set_uv2(quad_size)
-	st.set_uv(uvs[1])
+	st.set_uv2(page)
+	st.set_uv(Vector2(quad_size.x, quad_size.y))
 	st.add_vertex(v2)
 
 func get_uvs(block:int, face:int):

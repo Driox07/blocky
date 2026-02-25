@@ -69,7 +69,7 @@ func _process(_delta):
 
 func check_chunk():
 	var current_chunk = Chunk.coordinates_2_chunk(int(position.x), int(position.z))
-	if last_current_chunk != current_chunk:
+	if last_current_chunk != current_chunk and world != null:
 		last_current_chunk = current_chunk
 		world.set_queue(self, get_chunks_in_sight())
 
@@ -85,6 +85,12 @@ func update_raycast():
 	var b_y = floor(block_pos.y)
 	var b_z = floor(block_pos.z)
 	highlight_box.global_position = Vector3(b_x + 0.5, b_y + 0.5, b_z + 0.5)
+	if Input.is_action_just_pressed("hit"):
+		var block_chunk = Chunk.coordinates_2_chunk(b_x, b_z)
+		var chunk:Chunk = world.loaded_chunks.get(block_chunk)
+		if chunk == null: return
+		chunk.set_block(b_x, b_y, b_z, Blocks.Block.AIR)
+		chunk.reload_chunk()
 
 func get_chunks_in_sight(exclude_loaded:bool=true):
 	if world == null: return
