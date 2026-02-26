@@ -86,11 +86,14 @@ func update_raycast():
 	var b_z = floor(block_pos.z)
 	highlight_box.global_position = Vector3(b_x + 0.5, b_y + 0.5, b_z + 0.5)
 	if Input.is_action_just_pressed("hit"):
+		print("Clicked!")
 		var block_chunk = Chunk.coordinates_2_chunk(b_x, b_z)
 		var chunk:Chunk = world.loaded_chunks.get(block_chunk)
 		if chunk == null: return
-		chunk.set_block(b_x, b_y, b_z, Blocks.Block.AIR)
-		chunk.reload_chunk()
+		var local_x = b_x - (chunk.chunk_x * Chunk.CHUNK_SIZE)
+		var local_z = b_z - (chunk.chunk_y * Chunk.CHUNK_SIZE)
+		chunk.set_block(local_x, b_y, local_z, Blocks.Block.AIR)
+		chunk.reload_chunk([Chunk.y_2_section(b_y)])
 
 func get_chunks_in_sight(exclude_loaded:bool=true):
 	if world == null: return

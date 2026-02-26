@@ -20,5 +20,5 @@ const textures = {
 func is_block_solid(block:Block):
 	return SOLIDS.has(block)
 
-func is_block_trasnparent(block:Block):
+func is_block_transparent(block:Block):
 	return TRANSPARENTS.has(block)

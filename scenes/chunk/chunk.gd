@@ -13,6 +13,10 @@ signal unloaded
 ===================================="""
 static var CHUNK_SIZE = 16
 static var CHUNK_HEIGHT = 64
+static var CHUNK_SECTIONS = 4
+@warning_ignore("integer_division")
+static var CHUNK_SECTION_H = CHUNK_HEIGHT / CHUNK_SECTIONS
+
 static var CHUNK_GEN_HEIGHT_MARGIN = 10
 static var CHUNK_GEN_MIN_BASE = 5
 static var LAYER_STONE_HEIGHT = 20
@@ -25,6 +29,10 @@ static func coordinate_2_index(x:int, y:int, z:int) -> int:
 
 static func coordinates_2_chunk(x:int, z:int) -> Vector2i:
 	return Vector2i(floor(x*1.0/Chunk.CHUNK_SIZE), floor(z*1.0/Chunk.CHUNK_SIZE))
+
+static func y_2_section(y:int) -> int:
+	@warning_ignore("integer_division")
+	return y / CHUNK_SECTION_H
 
 static func get_chunks_in_radius(center_x: int, center_y: int, radius: int, to_exclude: Array = []) -> Array[Vector2i]:
 	var chunk_list: Array[Vector2i] = []
@@ -39,26 +47,17 @@ static func get_chunks_in_radius(center_x: int, center_y: int, radius: int, to_e
 	return chunk_list
 
 static func setup_material():
-	#if texture == null and material == null:
-		#texture = preload("res://assets/block_textures.png")
-		#material = StandardMaterial3D.new()
-		#material.albedo_texture = texture
-		##material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		#material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
-		#material.roughness = 1.0
 	if texture == null and material == null:
 		texture = preload("res://assets/blocks/block_textures.png")
-		var shader = preload("res://assets/shaders/block_texture_repeat.gdshader")
-		material = ShaderMaterial.new()
-		material.shader = shader
-		material.set_shader_parameter("texture_array", texture)
-		
+		material = StandardMaterial3D.new()
+		material.albedo_texture = texture
+		#material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+		material.roughness = 1.0
 
 """====================================
 ----------- INSTANCE LOGIC ------------
 ===================================="""
-@onready var chunk_mesh: MeshInstance3D = $ChunkMesh
-@onready var collision_shape: CollisionShape3D = $StaticBody3D/CollisionShape3D
 
 var noise:FastNoiseLite
 var chunk_x:int
@@ -66,6 +65,8 @@ var chunk_y:int
 var blocks_data:PackedByteArray
 var finished_loading:bool = false
 var marked_for_unload:bool = false
+var sections:Array[Array] = [] # Array of arrays with format [Mesh, Collision]
+var section_loaded:Array[bool] = []
 
 # Establish noise and chunk coordinates
 func init_chunk(n:FastNoiseLite, cx:int=0, cy:int=0):
@@ -76,6 +77,7 @@ func init_chunk(n:FastNoiseLite, cx:int=0, cy:int=0):
 # Load material if it is not, and air box
 func _ready():
 	setup_material()
+	create_section_instances()
 	blocks_data.resize(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT)
 	blocks_data.fill(Blocks.Block.AIR)
 	load_chunk()
@@ -83,6 +85,20 @@ func _ready():
 func _process(_delta: float) -> void:
 	if marked_for_unload and finished_loading:
 		unload()
+
+# Initialize a mesh instance for each chunk section
+func create_section_instances():
+	for i in range(CHUNK_SECTIONS):
+		section_loaded.append(false)
+		var section = MeshInstance3D.new()
+		var static_body = StaticBody3D.new()
+		var collider = CollisionShape3D.new()
+		static_body.add_child(collider)
+		section.position.y = i * CHUNK_SECTION_H
+		static_body.position.y = i * CHUNK_SECTION_H
+		sections.append([section, collider])
+		add_child(section)
+		add_child(static_body)
 
 func load_chunk(data:PackedByteArray=[]):
 	var chunk_load_process = Callable(self, "_load_process").bind(data)
@@ -96,24 +112,28 @@ func _load_process(data:PackedByteArray=[]):
 		finished_loading = true
 		loaded.emit()
 		return
-	#var mesh = build_mesh()
-	var mesh = build_greedy_mesh()
+	for i in range(CHUNK_SECTIONS):
+		var mesh = build_mesh(i)
+		var shape = mesh.create_trimesh_shape()
+		call_deferred("apply_mesh", i, mesh, shape)
+
+func reload_chunk(sections_to_reload:Array[int]):
+	for s in sections_to_reload:
+		var chunk_reload_process = Callable(self, "_reload_process").bind(s)
+		WorkerThreadPool.add_task(chunk_reload_process, true)
+
+func _reload_process(section:int):
+	var mesh = build_mesh(section)
 	var shape = mesh.create_trimesh_shape()
-	call_deferred("apply_mesh", mesh, shape)
+	call_deferred("apply_mesh", section, mesh, shape)
 
-func reload_chunk():
-	WorkerThreadPool.add_task(_reload_process, true)
-
-func _reload_process():
-	#var mesh = build_mesh()
-	var mesh = build_greedy_mesh()
-	var shape = mesh.create_trimesh_shape()
-	call_deferred("apply_mesh", mesh, shape)
-
-func apply_mesh(new_mesh: ArrayMesh, shape: ConcavePolygonShape3D):
-	chunk_mesh.mesh = new_mesh
-	chunk_mesh.material_override = material
-	collision_shape.shape = shape
+func apply_mesh(section:int, new_mesh: ArrayMesh, shape: ConcavePolygonShape3D):
+	sections[section][0].mesh = new_mesh
+	sections[section][0].material_override = material
+	sections[section][1].shape = shape
+	section_loaded[section] = true
+	for s in section_loaded:
+		if not s: return
 	loaded.emit()
 	finished_loading = true
 
@@ -132,10 +152,20 @@ func set_block(x: int, y: int, z: int, block: int):
 		blocks_data[index] = block
 
 func get_block(x:int, y:int, z:int) -> int:
-	if y < 0 or y >= CHUNK_HEIGHT:
+	if  y < 0 or y >= CHUNK_HEIGHT:
 		return Blocks.Block.AIR
 	if x >= 0 and x < CHUNK_SIZE and z >= 0 and z < CHUNK_SIZE:
-		return blocks_data[coordinate_2_index(x, y, z)]
+		var index = coordinate_2_index(x, y, z)
+		if index >= 0 and index < blocks_data.size():
+			return blocks_data[index]
+		return Blocks.Block.AIR
+	var global_x = (chunk_x * CHUNK_SIZE) + x
+	var global_z = (chunk_y * CHUNK_SIZE) + z
+	var noise_value = noise.get_noise_2d(global_x, global_z)
+	var normalized_value = (noise_value + 1.0) / 2.0
+	var predicted_height = int(normalized_value * (CHUNK_HEIGHT - CHUNK_GEN_HEIGHT_MARGIN) + CHUNK_GEN_MIN_BASE)
+	if y < predicted_height:
+		return Blocks.Block.STONE
 	return Blocks.Block.AIR
 
 func generate_from_noise(n:FastNoiseLite=noise):
@@ -154,114 +184,31 @@ func generate_from_noise(n:FastNoiseLite=noise):
 					block = Blocks.Block.GRASS
 				set_block(x, y, z, block)
 
-func build_mesh():
+func build_mesh(section:int):
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(material)
 	for x in range(CHUNK_SIZE):
-		for y in range(CHUNK_HEIGHT):
+		for y in range(CHUNK_SECTION_H):
 			for z in range(CHUNK_SIZE):
-				var block = get_block(x, y, z)
+				var block = get_block(x, y + section * CHUNK_SECTION_H, z)
 				if block == Blocks.Block.AIR:
 					continue
-				draw_block(x, y, z, block, st)
+				draw_block(x, y, z, block, st, section)
 	return st.commit()
 
-func build_greedy_mesh():
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(material)
-	var dims = [CHUNK_SIZE, CHUNK_HEIGHT, CHUNK_SIZE]
-	# Iterate in three axis
-	for d in range(3):
-		var u = (d + 1) % 3 # Row index (next dim)
-		var v = (d + 2) % 3 # Col index (next next dim)
-		var x = [0, 0, 0] # Block cursor while iterating
-		var q = [0, 0, 0]
-		q[d] = 1 # Q vector indicates neighbor blocks
-		var mask = []
-		mask.resize(dims[u] * dims[v])
-		# Scan chunk slices in current axis
-		for slice in range(-1, dims[d]):
-			x[d] = slice
-			var n = 0
-			mask.fill(0) # Everything starts as "hidden"
-			for y_idx in range(dims[v]):
-				x[v] = y_idx
-				for j_idx in range(dims[u]):
-					x[u] = j_idx
-					var current_block = Blocks.Block.AIR
-					if slice >= 0:
-						current_block = get_block(x[0], x[1], x[2]) as Blocks.Block
-					var compare_block = Blocks.Block.AIR
-					if slice < dims[d]:
-						compare_block = get_block(x[0]+q[0], x[1]+q[1], x[2]+q[2]) as Blocks.Block
-					var current_is_transparent = Blocks.is_block_trasnparent(current_block)
-					var compare_is_transparent = Blocks.is_block_trasnparent(compare_block)
-					if current_is_transparent != compare_is_transparent:
-						if not current_is_transparent:
-							mask[n] = current_block
-						else:
-							mask[n] = -compare_block
-					n += 1 # Next slice
-			x[d] += 1
-			var i = 0
-			for y_idx in range(dims[v]):
-				var j = 0
-				while j < dims[u]:
-					var mask_val = mask[i]
-					if mask_val != 0:
-						# Try to expand wide
-						var w = 1
-						while j+w < dims[u] and mask[i+w] == mask_val:
-							w += 1
-						# Try to expand hight
-						var h = 1
-						var done = false
-						while y_idx + h < dims[v]:
-							for k in range(w):
-								if mask[i + k + h * dims[u]] != mask_val:
-									done = true
-									break
-							if done:
-								break
-							h += 1
-						var block = abs(mask_val) as Blocks.Block
-						var is_positive = mask_val > 0
-						if d == 0:
-							var pos = Vector3(x[0], j, y_idx)
-							if is_positive: draw_greedy_face_east(block, pos, w, h, st)
-							else: draw_greedy_face_west(block, pos, w, h, st)
-						elif d == 1:
-							var pos = Vector3(y_idx, x[1], j)
-							if is_positive: draw_greedy_face_top(block, pos, w, h, st)
-							else: draw_greedy_face_bottom(block, pos, w, h, st)
-						elif d == 2:
-							var pos = Vector3(j, y_idx, x[2])
-							if is_positive: draw_greedy_face_north(block, pos, w, h, st)
-							else: draw_greedy_face_south(block, pos, w, h, st)
-						for l in range(h):
-							for k in range(w):
-								mask[i + k + l * dims[u]] = 0
-						j += w
-						i += w
-					else:
-						j += 1
-						i += 1
-	return st.commit()
-
-func draw_block(x:int, y:int, z:int, block:int, st:SurfaceTool):
-	if get_block(x, y + 1, z) == Blocks.Block.AIR:
+func draw_block(x:int, y:int, z:int, block:int, st:SurfaceTool, section:int):
+	if Blocks.is_block_transparent(get_block(x, y + section * CHUNK_SECTION_H + 1, z)):
 		draw_face_top(block, Vector3(x, y, z), st)
-	if get_block(x, y - 1, z) == Blocks.Block.AIR:
+	if Blocks.is_block_transparent(get_block(x, y + section * CHUNK_SECTION_H - 1, z)):
 		draw_face_bottom(block, Vector3(x, y, z), st)
-	if get_block(x + 1, y, z) == Blocks.Block.AIR:
+	if Blocks.is_block_transparent(get_block(x + 1, y + section * CHUNK_SECTION_H, z)):
 		draw_face_east(block, Vector3(x, y, z), st)
-	if get_block(x - 1, y, z) == Blocks.Block.AIR:
+	if Blocks.is_block_transparent(get_block(x - 1, y + section * CHUNK_SECTION_H, z)):
 		draw_face_west(block, Vector3(x, y, z), st)
-	if get_block(x, y, z + 1) == Blocks.Block.AIR:
+	if Blocks.is_block_transparent(get_block(x, y + section * CHUNK_SECTION_H, z + 1)):
 		draw_face_north(block, Vector3(x, y, z), st)
-	if get_block(x, y, z - 1) == Blocks.Block.AIR:
+	if Blocks.is_block_transparent(get_block(x, y + section * CHUNK_SECTION_H, z - 1)):
 		draw_face_south(block, Vector3(x, y, z), st)
 
 func draw_face_top(block:int, pos:Vector3, st:SurfaceTool):
@@ -321,83 +268,6 @@ func add_quad(st:SurfaceTool, v1:Vector3, v2:Vector3, v3:Vector3, v4:Vector3, uv
 	st.set_uv(uvs[2])
 	st.add_vertex(v3)
 	st.set_uv(uvs[1])
-	st.add_vertex(v2)
-
-func draw_greedy_face_east(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, h)
-	var v2 = pos + Vector3(0, 0, 0)
-	var v3 = pos + Vector3(0, w, 0)
-	var v4 = pos + Vector3(0, w, h)
-	var atlas_index = Blocks.textures[block][Blocks.Face.EAST]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(1, 0, 0), Vector2(h, w))
-
-func draw_greedy_face_west(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, 0)
-	var v2 = pos + Vector3(0, 0, h)
-	var v3 = pos + Vector3(0, w, h)
-	var v4 = pos + Vector3(0, w, 0)
-	var atlas_index = Blocks.textures[block][Blocks.Face.WEST]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(-1, 0, 0), Vector2(h, w))
-
-func draw_greedy_face_top(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, w)
-	var v2 = pos + Vector3(h, 0, w)
-	var v3 = pos + Vector3(h, 0, 0)
-	var v4 = pos + Vector3(0, 0, 0)
-	var atlas_index = Blocks.textures[block][Blocks.Face.TOP]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 1, 0), Vector2(h, w))
-
-func draw_greedy_face_bottom(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, 0)
-	var v2 = pos + Vector3(h, 0, 0)
-	var v3 = pos + Vector3(h, 0, w)
-	var v4 = pos + Vector3(0, 0, w)
-	var atlas_index = Blocks.textures[block][Blocks.Face.BOTTOM]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, -1, 0), Vector2(h, w))
-
-func draw_greedy_face_north(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(0, 0, 0)
-	var v2 = pos + Vector3(w, 0, 0)
-	var v3 = pos + Vector3(w, h, 0)
-	var v4 = pos + Vector3(0, h, 0)
-	var atlas_index = Blocks.textures[block][Blocks.Face.NORTH]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 0, 1), Vector2(w, h))
-
-func draw_greedy_face_south(block:int, pos:Vector3, w:int, h:int, st:SurfaceTool):
-	var v1 = pos + Vector3(w, 0, 0)
-	var v2 = pos + Vector3(0, 0, 0)
-	var v3 = pos + Vector3(0, h, 0)
-	var v4 = pos + Vector3(w, h, 0)
-	var atlas_index = Blocks.textures[block][Blocks.Face.SOUTH]
-	add_greedy_quad(st, v1, v2, v3, v4, atlas_index, Vector3(0, 0, -1), Vector2(w, h))
-
-func add_greedy_quad(st: SurfaceTool, v1: Vector3, v2: Vector3, v3: Vector3, v4: Vector3, atlas_index: int, normal: Vector3, quad_size: Vector2):
-	st.set_normal(normal)
-
-	var page = Vector2(atlas_index, 0)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(0, quad_size.y))
-	st.add_vertex(v1)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(0, 0))
-	st.add_vertex(v4)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(quad_size.x, 0))
-	st.add_vertex(v3)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(0, quad_size.y))
-	st.add_vertex(v1)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(quad_size.x, 0))
-	st.add_vertex(v3)
-
-	st.set_uv2(page)
-	st.set_uv(Vector2(quad_size.x, quad_size.y))
 	st.add_vertex(v2)
 
 func get_uvs(block:int, face:int):

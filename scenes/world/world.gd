@@ -113,12 +113,19 @@ func get_next_player():
 	next_player = Players.players[next_player_idx]
 
 func setup_noise():
+	# Original
+	#noise = FastNoiseLite.new()
+	#noise.seed = calculate_seed(world_seed)
+	#noise.noise_type = FastNoiseLite.TYPE_PERLIN 
+	#noise.frequency = 0.01 
+	#noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	#noise.fractal_octaves = 4 
 	noise = FastNoiseLite.new()
 	noise.seed = calculate_seed(world_seed)
-	noise.noise_type = FastNoiseLite.TYPE_PERLIN 
-	noise.frequency = 0.01 
+	noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise.frequency = 0.01
 	noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	noise.fractal_octaves = 4 
+	noise.fractal_octaves = 4
 
 func calculate_seed(s:String):
 	if s.strip_edges() == "":
@@ -134,16 +141,17 @@ func set_fog():
 	environment.environment.fog_depth_begin = fog_distance - Chunk.CHUNK_SIZE
 
 func update_debug_info():
-	%FPSLabel.text = str(Engine.get_frames_per_second())
-	var total_chunks = 0
-	for p in chunk_queues:
-		total_chunks += chunk_queues[p].size()
-	%ChunkQueueLabel.text = str(total_chunks) + " (" + str(loaded_chunks.size()) + " loaded)"
-	%UnloadQueueLabel.text = str(len(unload_queue))
-	if Client.client_player.position != null:
-		var pl = Client.client_player
-		%CoordsLabel.text = str(pl.position)
-		%ChunkLabel.text = str(Chunk.coordinates_2_chunk(int(pl.position.x), int(pl.position.z)))
+	if $DebugInfo.visible:
+		%FPSLabel.text = str(Engine.get_frames_per_second())
+		var total_chunks = 0
+		for p in chunk_queues:
+			total_chunks += chunk_queues[p].size()
+		%ChunkQueueLabel.text = str(total_chunks) + " (" + str(loaded_chunks.size()) + " loaded)"
+		%UnloadQueueLabel.text = str(len(unload_queue))
+		if Client.client_player.position != null:
+			var pl = Client.client_player
+			%CoordsLabel.text = str(pl.position)
+			%ChunkLabel.text = str(Chunk.coordinates_2_chunk(int(pl.position.x), int(pl.position.z)))
 
 func get_loaded_chunks_positions():
 	return loaded_chunks.keys()
