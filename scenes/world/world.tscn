@@ -22,6 +22,7 @@ fog_density = 1.0
 
 [node name="World" type="Node3D" unique_id=448434815]
 script = ExtResource("1_dphjl")
+world_seed = "semilla"
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=969201157]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 20, 0)

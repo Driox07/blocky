@@ -49,11 +49,10 @@ static func get_chunks_in_radius(center_x: int, center_y: int, radius: int, to_e
 static func setup_material():
 	if texture == null and material == null:
 		texture = preload("res://assets/blocks/block_textures.png")
-		material = StandardMaterial3D.new()
-		material.albedo_texture = texture
-		#material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
-		material.roughness = 1.0
+		var shader = preload("res://assets/shaders/text2darray.gdshader")
+		material = ShaderMaterial.new()
+		material.shader = shader
+		material.set_shader_parameter("texture_array", texture)
 
 """====================================
 ----------- INSTANCE LOGIC ------------
@@ -67,6 +66,7 @@ var finished_loading:bool = false
 var marked_for_unload:bool = false
 var sections:Array[Array] = [] # Array of arrays with format [Mesh, Collision]
 var section_loaded:Array[bool] = []
+var is_reloading = false
 
 # Establish noise and chunk coordinates
 func init_chunk(n:FastNoiseLite, cx:int=0, cy:int=0):
@@ -119,23 +119,26 @@ func _load_process(data:PackedByteArray=[]):
 
 func reload_chunk(sections_to_reload:Array[int]):
 	for s in sections_to_reload:
+		if is_reloading: return
 		var chunk_reload_process = Callable(self, "_reload_process").bind(s)
 		WorkerThreadPool.add_task(chunk_reload_process, true)
 
 func _reload_process(section:int):
 	var mesh = build_mesh(section)
 	var shape = mesh.create_trimesh_shape()
-	call_deferred("apply_mesh", section, mesh, shape)
+	print("Reloading chunk (", chunk_x, ", ", chunk_y, "), section ", section)
+	#call_deferred("apply_mesh", section, mesh, shape)
 
 func apply_mesh(section:int, new_mesh: ArrayMesh, shape: ConcavePolygonShape3D):
-	sections[section][0].mesh = new_mesh
+	if sections[section][0].mesh==null:sections[section][0].mesh = new_mesh
 	sections[section][0].material_override = material
-	sections[section][1].shape = shape
+	if sections[section][1].shape==null:sections[section][1].shape = shape
 	section_loaded[section] = true
 	for s in section_loaded:
 		if not s: return
 	loaded.emit()
 	finished_loading = true
+	is_reloading = false
 
 func mark_for_unload():
 	marked_for_unload = true
@@ -216,72 +219,70 @@ func draw_face_top(block:int, pos:Vector3, st:SurfaceTool):
 	var v2 = pos + Vector3(1, 1, 1)
 	var v3 = pos + Vector3(1, 1, 0)
 	var v4 = pos + Vector3(0, 1, 0)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.TOP), Vector3(0, 1, 0))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(0, 1, 0), Blocks.textures[block][Blocks.Face.TOP])
 
 func draw_face_bottom(block:int, pos:Vector3, st:SurfaceTool):
 	var v1 = pos + Vector3(0, 0, 0)
 	var v2 = pos + Vector3(1, 0, 0)
 	var v3 = pos + Vector3(1, 0, 1)
 	var v4 = pos + Vector3(0, 0, 1)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.BOTTOM), Vector3(0, -1, 0))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(0, -1, 0), Blocks.textures[block][Blocks.Face.BOTTOM])
 
 func draw_face_south(block:int, pos:Vector3, st:SurfaceTool):
 	var v1 = pos + Vector3(1, 0, 0)
 	var v2 = pos + Vector3(0, 0, 0)
 	var v3 = pos + Vector3(0, 1, 0)
 	var v4 = pos + Vector3(1, 1, 0)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.SOUTH), Vector3(0, 0, -1))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(0, 0, -1), Blocks.textures[block][Blocks.Face.SOUTH])
 
 func draw_face_north(block:int, pos:Vector3, st:SurfaceTool):
 	var v1 = pos + Vector3(0, 0, 1)
 	var v2 = pos + Vector3(1, 0, 1)
 	var v3 = pos + Vector3(1, 1, 1)
 	var v4 = pos + Vector3(0, 1, 1)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.NORTH), Vector3(0, 0, 1))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(0, 0, 1), Blocks.textures[block][Blocks.Face.NORTH])
 
 func draw_face_west(block:int, pos:Vector3, st:SurfaceTool):
 	var v1 = pos + Vector3(0, 0, 0)
 	var v2 = pos + Vector3(0, 0, 1)
 	var v3 = pos + Vector3(0, 1, 1)
 	var v4 = pos + Vector3(0, 1, 0)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.WEST), Vector3(-1, 0, 0))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(-1, 0, 0), Blocks.textures[block][Blocks.Face.WEST])
 
 func draw_face_east(block:int, pos:Vector3, st:SurfaceTool):
 	var v1 = pos + Vector3(1, 0, 1)
 	var v2 = pos + Vector3(1, 0, 0)
 	var v3 = pos + Vector3(1, 1, 0)
 	var v4 = pos + Vector3(1, 1, 1)
-	add_quad(st, v1, v2, v3, v4, get_uvs(block, Blocks.Face.EAST), Vector3(1, 0, 0))
+	add_quad(st, v1, v2, v3, v4, get_uvs(), Vector3(1, 0, 0), Blocks.textures[block][Blocks.Face.EAST])
 
-func add_quad(st:SurfaceTool, v1:Vector3, v2:Vector3, v3:Vector3, v4:Vector3, uvs:Array, normal:Vector3):	
+func add_quad(st:SurfaceTool, v1:Vector3, v2:Vector3, v3:Vector3, v4:Vector3, uvs:Array, normal:Vector3, texture_idx:int):	
 	st.set_normal(normal)
 	
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[0])
 	st.add_vertex(v1)
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[3])
 	st.add_vertex(v4)
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[2])
 	st.add_vertex(v3)
 	
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[0])
 	st.add_vertex(v1)
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[2])
 	st.add_vertex(v3)
+	st.set_uv2(Vector2(texture_idx, 0))
 	st.set_uv(uvs[1])
 	st.add_vertex(v2)
 
-func get_uvs(block:int, face:int):
-	var atlas_index = Blocks.textures[block][face]
-	var atlas_x = atlas_index % Blocks.ATLAS_COLS
-	var atlas_y = atlas_index / Blocks.ATLAS_COLS
-	var uv_w = 1.0 / Blocks.ATLAS_COLS
-	var uv_h = 1.0 / Blocks.ATLAS_ROWS
-	var u = atlas_x * uv_w
-	var v = atlas_y * uv_h
-	var m = 0
+func get_uvs():
 	return [
-	Vector2(u + m, v + uv_h - m),
-	Vector2(u + uv_w - m, v + uv_h - m),
-	Vector2(u + uv_w - m, v + m),
-	Vector2(u + m, v + m)
+		Vector2(0, 1),
+		Vector2(1, 1),
+		Vector2(1, 0),
+		Vector2(0, 0)
 	]
