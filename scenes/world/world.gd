@@ -10,15 +10,18 @@ const chunk_scene = preload("res://scenes/chunk/chunk.tscn")
 @export var world_seed:String = ""
 var noise:FastNoiseLite
 
-const MAX_CHUNKS_PER_FRAME = 8
+const MAX_CHUNKS_LOAD_PER_FRAME = 8
 const MAX_CHUNKS_UNLOAD_PER_FRAME = 8
+const MAX_CHUNKS_RELOAD_PER_FRAME = 8
 
 var chunks_loading = 0
 var chunks_unloading = 0
+var chunks_reloading = 0
 
 var last_player_queue = 0 # Index of the player in Players
 var chunk_queues = {}
 var unload_queue = []
+var reload_queue = []
 var next_player = null
 var next_player_idx = -1
 var loaded_chunks = {}
@@ -31,6 +34,7 @@ func _ready() -> void:
 	set_fog()
 
 func _process(_delta: float) -> void:
+	reload_chunks()
 	load_chunks()
 	unload_chunks()
 	update_debug_info()
@@ -39,7 +43,7 @@ func set_queue(player: Player, new_chunks: Array[Vector2i]):
 	chunk_queues[player] = new_chunks
 
 func load_chunks():
-	if chunks_loading >= MAX_CHUNKS_PER_FRAME: return
+	if chunks_loading >= MAX_CHUNKS_LOAD_PER_FRAME: return
 	if next_player == null:
 		get_next_player()
 		return
@@ -53,16 +57,32 @@ func load_chunks():
 	var new_chunk = chunk_scene.instantiate()
 	new_chunk.init_chunk(noise, chunk.x, chunk.y)
 	new_chunk.position = Vector3(chunk.x * Chunk.CHUNK_SIZE, 0, chunk.y * Chunk.CHUNK_SIZE)
-	new_chunk.loaded.connect(_on_chunk_loaded)
+	new_chunk.loaded.connect(_on_chunk_loaded.bind(new_chunk))
 	chunks_root.add_child(new_chunk)
 	loaded_chunks[chunk] = new_chunk
 	get_next_player()
 
-func _on_chunk_loaded():
+func _on_chunk_loaded(chunk:Chunk):
 	chunks_loading = max(0, chunks_loading - 1)
+	if chunk != null:
+		chunk.loaded.disconnect(_on_chunk_loaded.bind(chunk))
 
 func _on_chunk_unloaded():
 	chunks_unloading = max(0, chunks_unloading - 1)
+
+func _on_chunk_reloaded(chunk:Chunk):
+	chunks_reloading = max(0, chunks_reloading - 1)
+	if chunk != null:
+		chunk.reloaded.disconnect(_on_chunk_reloaded.bind(chunk))
+
+func reload_chunks():
+	if chunks_reloading >= MAX_CHUNKS_RELOAD_PER_FRAME: return
+	if reload_queue.is_empty(): return
+	var reload_element = reload_queue.pop_front()
+	var chunk = reload_element[0]
+	var section = reload_element[1]
+	chunk.reloaded.connect(_on_chunk_reloaded.bind(loaded_chunks.get(chunk)))
+	chunk.reload_chunk(section)
 
 func unload_chunks():
 	#print("Trying to unload chunks. (" + str(chunks_unloading) + " unloading now)")

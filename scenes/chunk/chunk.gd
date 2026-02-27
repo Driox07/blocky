@@ -7,6 +7,7 @@ extends Node3D
 ===================================="""
 signal loaded
 signal unloaded
+signal reloaded
 
 """====================================
 -------- STATIC VARS AND FUNCS --------
@@ -101,10 +102,10 @@ func create_section_instances():
 		add_child(static_body)
 
 func load_chunk(data:PackedByteArray=[]):
-	var chunk_load_process = Callable(self, "_load_process").bind(data)
+	var chunk_load_process = Callable(self, "_do_load_chunk").bind(data)
 	WorkerThreadPool.add_task(chunk_load_process, true)
 
-func _load_process(data:PackedByteArray=[]):
+func _do_load_chunk(data:PackedByteArray=[]):
 	if noise != null and data.is_empty():
 		generate_from_noise(noise)
 	elif data.size() == CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT:
@@ -118,25 +119,36 @@ func _load_process(data:PackedByteArray=[]):
 		call_deferred("apply_mesh", i, mesh, shape)
 
 func reload_chunk(sections_to_reload:Array[int]):
-	for s in sections_to_reload:
-		if is_reloading: return
-		var chunk_reload_process = Callable(self, "_reload_process").bind(s)
-		WorkerThreadPool.add_task(chunk_reload_process, true)
+	for section in sections_to_reload:
+		var chunk_load_process = Callable(self, "_do_reload_chunk").bind(section)
+		WorkerThreadPool.add_task(chunk_load_process, true)
 
-func _reload_process(section:int):
+func _do_reload_chunk(section:int):
 	var mesh = build_mesh(section)
-	var shape = mesh.create_trimesh_shape()
-	print("Reloading chunk (", chunk_x, ", ", chunk_y, "), section ", section)
-	#call_deferred("apply_mesh", section, mesh, shape)
+	call_deferred("apply_mesh", section, mesh)
 
-func apply_mesh(section:int, new_mesh: ArrayMesh, shape: ConcavePolygonShape3D):
-	if sections[section][0].mesh==null:sections[section][0].mesh = new_mesh
+func apply_mesh(section:int, new_mesh: ArrayMesh, shape: ConcavePolygonShape3D = null):
+	sections[section][0].mesh = new_mesh
 	sections[section][0].material_override = material
-	if sections[section][1].shape==null:sections[section][1].shape = shape
+	if shape != null: 
+		sections[section][1].shape = shape
+	else:
+		var faces = new_mesh.get_faces()
+		var existing_shape = sections[section][1].shape
+		if faces.size() > 0:
+			if existing_shape is ConcavePolygonShape3D:
+				existing_shape.set_faces(faces)
+			else:
+				var new_shape = ConcavePolygonShape3D.new()
+				new_shape.set_faces(faces)
+				sections[section][1].shape = new_shape
+		else:
+			sections[section][1].shape = null
 	section_loaded[section] = true
 	for s in section_loaded:
 		if not s: return
 	loaded.emit()
+	reloaded.emit()
 	finished_loading = true
 	is_reloading = false
 
@@ -186,6 +198,10 @@ func generate_from_noise(n:FastNoiseLite=noise):
 				if y == height - 1:
 					block = Blocks.Block.GRASS
 				set_block(x, y, z, block)
+
+""" 
+Mesh building related code
+"""
 
 func build_mesh(section:int):
 	var st = SurfaceTool.new()
